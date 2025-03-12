@@ -6,10 +6,14 @@ from app.db.session import async_session
 from app.crud.source import source
 from app.services.rss_parser import rss_parser
 from app.services.download_manager import download_manager
+from app.services.qbittorrent import qbittorrent_client
+
+import logging
 
 class Scheduler:
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
+        self.is_checking = False
         self._setup_jobs()
 
     def _setup_jobs(self):
@@ -24,15 +28,32 @@ class Scheduler:
 
     async def _check_rss_sources(self):
         """检查所有需要更新的RSS源"""
-        async with async_session() as db:
-            # 获取所有活跃的RSS源
-            sources = await source.get_active_rss_sources(db)
+        if self.is_checking:
+            return
+        self.is_checking = True
+        try:
+            logging.info("开始检查RSS源")
+            async with async_session() as db:
+                # 获取所有活跃的RSS源
+                sources = await source.get_active_rss_sources(db)
+                
+                for src in sources:
+                    # 检查是否需要更新
+                    if not src.last_check or \
+                    (datetime.utcnow() - src.last_check).total_seconds() >= src.check_interval:
+                        await self._process_rss_source(db, src)
             
-            for src in sources:
-                # 检查是否需要更新
-                if not src.last_check or \
-                   (datetime.utcnow() - src.last_check).total_seconds() >= src.check_interval:
-                    await self._process_rss_source(db, src)
+            logging.info("开始更新下载中种子状态")
+            async with async_session() as db:
+                # 更新下载中的种子状态
+                torrents = await download_manager.get_torrents_need_update(db)
+                for torrent in torrents:
+                    logging.info(f"检查种子 {torrent.hash} 状态")
+                    info = await qbittorrent_client.get_torrent_info(torrent.hash)
+                    await download_manager.update_torrent_status(db, torrent.id, info)
+        finally:
+            self.is_checking = False
+        
 
     async def _process_rss_source(self, db: AsyncSession, src):
         """处理单个RSS源的更新"""
@@ -58,7 +79,7 @@ class Scheduler:
                     )
         except Exception as e:
             # 记录错误但不中断其他源的处理
-            print(f"处理RSS源 {src.url} 时出错: {str(e)}")
+            logging.warning(f"处理RSS源 {src.url} 时出错: {str(e)}")
 
     def start(self):
         """启动调度器"""
@@ -67,5 +88,12 @@ class Scheduler:
     def shutdown(self):
         """关闭调度器"""
         self.scheduler.shutdown()
+    
+    async def manual_check(self):
+        """手动触发一次RSS源检查"""
+        logging.info("手动触发一次RSS源检查")
+        self.scheduler.pause_job('check_rss_sources')
+        await self._check_rss_sources()
+        self.scheduler.resume_job('check_rss_sources')
 
 scheduler = Scheduler() 

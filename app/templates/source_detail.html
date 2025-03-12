@@ -29,7 +29,7 @@
                             <td>{{ torrent.id }}</td>
                             <td>{{ torrent.hash }}</td>
                             <td>{{ torrent.status }}</td>
-                            <td>{{ torrent.download_progress }}%</td>
+                            <td>{{ "%.2f"|format(torrent.download_progress) }}%</td>
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
                                     <a href="/api/torrents/{{ torrent.id }}" class="btn btn-info">详情</a>

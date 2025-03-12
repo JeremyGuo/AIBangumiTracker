@@ -45,7 +45,7 @@ class Torrent(Base):
         index=True
     )
     url: Mapped[str] = mapped_column(String)  # 磁力链接
-    status: Mapped[str] = mapped_column(String)  # downloading/downloaded/processing/completed/failed
+    status: Mapped[str] = mapped_column(String)  # downloading/downloaded/failed
     download_progress: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

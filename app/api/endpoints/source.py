@@ -16,6 +16,7 @@ from app.schemas.source import (
 )
 from app.models.database import User, Torrent, Source as SourceModel
 from app.core.config import settings
+from app.services.scheduler import scheduler
 import logging
 
 router = APIRouter()
@@ -178,6 +179,10 @@ async def reset_source_check_time(
     from datetime import datetime, timezone
     past_time = datetime(2000, 1, 1, tzinfo=timezone.utc)
     await source.update(db, db_obj=db_obj, obj_in={"last_check": past_time})
+
+    # manual re-echeck asynchrously
+    import asyncio
+    asyncio.create_task(scheduler.manual_check())
     
     logger.info(f"已重置来源 ID:{source_id} 的检查时间")
     return {"status": "success", "message": "已重置来源的检查时间"}

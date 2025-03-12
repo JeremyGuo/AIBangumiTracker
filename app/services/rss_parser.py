@@ -4,6 +4,7 @@ import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from app.core.config import settings
+import logging
 
 class RSSParser:
     def __init__(self):
@@ -89,17 +90,11 @@ class RSSParser:
 
     def _extract_magnet(self, content: str) -> Tuple[Optional[str], Optional[str]]:
         """从内容中提取磁力链接和哈希值"""
-        # 匹配磁力链接
-        magnet_pattern = r'magnet:\?xt=urn:btih:([a-zA-Z0-9]+)'
+        # 匹配磁力链接以及其携带的信息 (dn, dht, tr, etc.)
+        magnet_pattern = r'magnet:\?xt=urn:btih:([a-zA-Z0-9]+)(?:&dn=([^\s&]+))?(?:&tr=([^\s&]+))?(?:&dht=([^\s&]+))?.*'
         match = re.search(magnet_pattern, content)
         if match:
             return match.group(0), match.group(1)
-        
-        # 匹配种子哈希
-        hash_pattern = r'([a-fA-F0-9]{40})'
-        match = re.search(hash_pattern, content)
-        if match:
-            return f"magnet:?xt=urn:btih:{match.group(1)}", match.group(1)
         
         return None, None
 
@@ -173,24 +168,24 @@ class RSSParser:
                     if elem.text:
                         magnet, hash_value = self._extract_magnet(elem.text)
                         if magnet:
+                            logging.info(f"Magnet: {magnet}")
                             result["magnet"] = magnet
                             result["hash"] = hash_value
                             break
                 
                 # 2. 如果没有磁力链接，尝试下载种子文件
                 if not result["magnet"]:
-                    for elem in item:
-                        if elem.text:
-                            torrent_url = self._extract_torrent_url(elem.text)
-                            if torrent_url:
-                                magnet = await self._download_torrent(torrent_url)
-                                if magnet:
-                                    result["magnet"] = magnet
-                                    # 从磁力链接中提取哈希值
-                                    hash_match = re.search(r'btih:([a-zA-Z0-9]+)', magnet)
-                                    if hash_match:
-                                        result["hash"] = hash_match.group(1)
-                                    break
+                    # convert item to text
+                    item_text = ET.tostring(item, encoding='utf-8', method='xml').decode('utf-8')
+                    torrent_url = self._extract_torrent_url(item_text)
+                    if torrent_url:
+                        magnet = await self._download_torrent(torrent_url)
+                        if magnet:
+                            result["magnet"] = magnet
+                            # 从磁力链接中提取哈希值
+                            hash_match = re.search(r'btih:([a-zA-Z0-9]+)', magnet)
+                            if hash_match:
+                                result["hash"] = hash_match.group(1)
                 
                 # 只添加有标题和磁力链接的条目
                 if result["title"] and result["magnet"]:
