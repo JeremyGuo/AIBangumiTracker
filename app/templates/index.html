@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - AIAutoBangumi{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- 修复错误消息显示区域，使用正确的请求参数访问语法 -->
+    {% if request.query_params.error %}
+    <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+        {{ request.query_params.error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col-12">
+            <h1 class="text-center mb-4">欢迎使用 AIAutoBangumi</h1>
+            <p>AIAutoBangumi 是一个自动化番剧管理系统，具备以下功能：</p>
+            <ul>
+                <li>番剧资源自动下载</li>
+                <li>AI 重命名与整理</li>
+                <li>番剧库管理</li>
+                <li>媒体服务器集成</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h2>快速导航</h2>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <h3>番剧管理</h3>
+                            <p>管理您的番剧库存</p>
+                            <a href="/api/source" class="btn btn-primary">前往</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <h3>下载管理</h3>
+                            <p>查看下载状态</p>
+                            <a href="/downloads" class="btn btn-primary">前往</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <h3>系统设置</h3>
+                            <p>配置系统参数</p>
+                            {% if is_admin is defined and is_admin %}
+                            <a href="/api/settings" class="btn btn-primary">前往</a>
+                            {% else %}
+                            <button class="btn btn-secondary" disabled title="需要管理员权限">前往</button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h2>系统状态</h2>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card text-white bg-primary">
+                        <div class="card-body text-center">
+                            <h4 class="card-title">用户数</h4>
+                            <h2>{{ user_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card text-white bg-success">
+                        <div class="card-body text-center">
+                            <h4 class="card-title">来源数</h4>
+                            <h2>{{ source_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card text-white bg-info">
+                        <div class="card-body text-center">
+                            <h4 class="card-title">种子数</h4>
+                            <h2>{{ torrent_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p><strong>当前用户:</strong> {{ username }}</p>
+            <p><strong>登录状态:</strong> 已登录</p>
+            <p><strong>管理员权限:</strong> {% if is_admin %}是{% else %}否{% endif %}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

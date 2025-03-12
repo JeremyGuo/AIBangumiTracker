@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+
+{% block title %}来源管理 - AIAutoBangumi{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>来源管理</h1>
+        <a href="/api/source/create" class="btn btn-primary">添加来源</a>
+    </div>
+
+    <!-- 添加通知区域 -->
+    <div id="notification-area">
+        <!-- 通知将通过JS动态添加 -->
+    </div>
+
+    <!-- 添加搜索筛选 -->
+    <div class="mb-3">
+        <div class="input-group">
+            <input type="text" id="source-search" class="form-control" placeholder="搜索标题...">
+            <div class="input-group-append">
+                <select id="type-filter" class="form-select">
+                    <option value="">所有类型</option>
+                    <option value="RSS">RSS</option>
+                    <option value="magnet">磁力链接</option>
+                </select>
+                <select id="media-filter" class="form-select">
+                    <option value="">所有媒体</option>
+                    <option value="tv">电视剧</option>
+                    <option value="movie">电影</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    {% if sources %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="source-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>标题</th>
+                        <th>类型</th>
+                        <th>媒体类型</th>
+                        <th>季度</th>
+                        <th>上次检查</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for source in sources %}
+                    <tr data-id="{{ source.id }}" data-title="{{ source.title }}" data-type="{{ source.type }}" data-media="{{ source.media_type }}">
+                        <td>{{ source.id }}</td>
+                        <td>{{ source.title }}</td>
+                        <td>{{ source.type }}</td>
+                        <td>{{ source.media_type }}</td>
+                        <td>{% if source.season %}{{ source.season }}{% else %}-{% endif %}</td>
+                        <td>{% if source.last_check %}{{ source.last_check.strftime('%Y-%m-%d %H:%M') }}{% else %}从未{% endif %}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="/api/source/{{ source.id }}" class="btn btn-info">详情</a>
+                                <button type="button" class="btn btn-warning reset-btn" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#resetModal" 
+                                    data-source-id="{{ source.id }}"
+                                    data-source-title="{{ source.title }}">
+                                    重启
+                                </button>
+                                <button type="button" class="btn btn-danger delete-btn" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#deleteModal" 
+                                    data-source-id="{{ source.id }}"
+                                    data-source-title="{{ source.title }}">
+                                    删除
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 删除确认对话框 -->
+        <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="deleteModalLabel">确认删除</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        确定要删除来源 <span id="sourceTitle"></span> 吗？此操作不可撤销。
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" id="confirmDeleteBtn" class="btn btn-danger" data-loading-text="删除中...">删除</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 重启确认对话框 -->
+        <div class="modal fade" id="resetModal" tabindex="-1" aria-labelledby="resetModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="resetModalLabel">确认重启</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        确定要重启来源 <span id="resetSourceTitle"></span> 吗？
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" id="confirmResetBtn" class="btn btn-warning" data-loading-text="重启中...">重启</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            暂无来源，请点击"添加来源"按钮添加。
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 删除模态框处理
+        const deleteModal = document.getElementById('deleteModal');
+        let currentSourceId = null;
+        
+        if (deleteModal) {
+            deleteModal.addEventListener('show.bs.modal', function(event) {
+                const button = event.relatedTarget;
+                currentSourceId = button.getAttribute('data-source-id');
+                const sourceTitle = button.getAttribute('data-source-title');
+                
+                document.getElementById('sourceTitle').textContent = sourceTitle;
+            });
+        }
+        
+        // AJAX删除处理
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', function() {
+                if (!currentSourceId) return;
+                
+                // 显示加载状态
+                const originalText = confirmDeleteBtn.textContent;
+                confirmDeleteBtn.textContent = confirmDeleteBtn.getAttribute('data-loading-text');
+                confirmDeleteBtn.disabled = true;
+                
+                // 发送AJAX请求
+                fetch(`/api/source/${currentSourceId}/delete`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('删除请求失败');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // 关闭模态框
+                    const bsModal = bootstrap.Modal.getInstance(deleteModal);
+                    bsModal.hide();
+                    
+                    // 从DOM中移除该行
+                    const row = document.querySelector(`tr[data-id="${currentSourceId}"]`);
+                    if (row) {
+                        row.remove();
+                        
+                        // 如果没有数据了，显示提示
+                        if (document.querySelectorAll('#source-table tbody tr').length === 0) {
+                            const tableContainer = document.querySelector('.table-responsive');
+                            tableContainer.insertAdjacentHTML('afterend', 
+                                '<div class="alert alert-info">暂无来源，请点击"添加来源"按钮添加。</div>'
+                            );
+                            tableContainer.remove();
+                        }
+                    }
+                    
+                    // 显示成功通知
+                    showNotification('删除成功', 'success');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // 显示错误通知
+                    showNotification('删除失败: ' + error.message, 'danger');
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    confirmDeleteBtn.textContent = originalText;
+                    confirmDeleteBtn.disabled = false;
+                });
+            });
+        }
+
+        // 重启模态框处理
+        const resetModal = document.getElementById('resetModal');
+        let currentResetSourceId = null;
+
+        if (resetModal) {
+            resetModal.addEventListener('show.bs.modal', function(event) {
+                const button = event.relatedTarget;
+                currentResetSourceId = button.getAttribute('data-source-id');
+                const sourceTitle = button.getAttribute('data-source-title');
+
+                document.getElementById('resetSourceTitle').textContent = sourceTitle;
+            });
+        }
+
+        // AJAX重启处理
+        const confirmResetBtn = document.getElementById('confirmResetBtn');
+        if (confirmResetBtn) {
+            confirmResetBtn.addEventListener('click', function() {
+                if (!currentResetSourceId) return;
+
+                // 显示加载状态
+                const originalText = confirmResetBtn.textContent;
+                confirmResetBtn.textContent = confirmResetBtn.getAttribute('data-loading-text');
+                confirmResetBtn.disabled = true;
+
+                // 发送AJAX请求
+                fetch(`/api/source/${currentResetSourceId}/reset-check`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('重启请求失败');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // 关闭模态框
+                    const bsModal = bootstrap.Modal.getInstance(resetModal);
+                    bsModal.hide();
+
+                    // 显示成功通知
+                    showNotification('重启成功', 'success');
+                    
+                    // 刷新页面以获取最新状态
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000); // 延迟1秒刷新，让用户先看到成功通知
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // 显示错误通知
+                    showNotification('重启失败: ' + error.message, 'danger');
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    confirmResetBtn.textContent = originalText;
+                    confirmResetBtn.disabled = false;
+                });
+            });
+        }
+        
+        // 通知函数
+        function showNotification(message, type = 'info') {
+            const notificationArea = document.getElementById('notification-area');
+            const notificationId = 'notification-' + Date.now();
+            
+            const notification = `
+                <div id="${notificationId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            notificationArea.insertAdjacentHTML('beforeend', notification);
+            
+            // 5秒后自动关闭
+            setTimeout(() => {
+                const notificationElement = document.getElementById(notificationId);
+                if (notificationElement) {
+                    notificationElement.remove();
+                }
+            }, 5000);
+        }
+        
+        // 搜索和筛选功能
+        const sourceSearch = document.getElementById('source-search');
+        const typeFilter = document.getElementById('type-filter');
+        const mediaFilter = document.getElementById('media-filter');
+        
+        function filterTable() {
+            const searchTerm = sourceSearch.value.toLowerCase();
+            const selectedType = typeFilter.value;
+            const selectedMedia = mediaFilter.value;
+            
+            const rows = document.querySelectorAll('#source-table tbody tr');
+            
+            rows.forEach(row => {
+                const title = row.getAttribute('data-title').toLowerCase();
+                const type = row.getAttribute('data-type');
+                const media = row.getAttribute('data-media');
+                
+                const typeMatch = !selectedType || type === selectedType;
+                const mediaMatch = !selectedMedia || media === selectedMedia;
+                const searchMatch = !searchTerm || title.includes(searchTerm);
+                
+                if (typeMatch && mediaMatch && searchMatch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        // 添加事件监听器
+        if (sourceSearch) sourceSearch.addEventListener('input', filterTable);
+        if (typeFilter) typeFilter.addEventListener('change', filterTable);
+        if (mediaFilter) mediaFilter.addEventListener('change', filterTable);
+        
+        // 添加自动检查功能
+        const refreshSourceCheck = async () => {
+            try {
+                const response = await fetch('/api/source/check-updates', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.updated && data.updated.length > 0) {
+                        // 更新表格中的最后检查时间
+                        data.updated.forEach(src => {
+                            const row = document.querySelector(`tr[data-id="${src.id}"]`);
+                            if (row) {
+                                const lastCheckCell = row.cells[5]; // 假设最后检查时间在第6列
+                                lastCheckCell.textContent = src.last_check;
+                            }
+                        });
+                        showNotification(`已更新 ${data.updated.length} 个来源的检查时间`, 'info');
+                    }
+                }
+            } catch (error) {
+                console.error('检查更新失败:', error);
+            }
+        };
+        
+        // 每60秒自动检查一次更新 (可根据需要调整)
+        // setInterval(refreshSourceCheck, 60000);
+    });
+</script>
+{% endblock %}

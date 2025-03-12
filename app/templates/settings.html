@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - AIAutoBangumi{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">系统设置</h1>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="settingsTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="download-tab" data-bs-toggle="tab" data-bs-target="#download" type="button" role="tab" aria-controls="download" aria-selected="true">下载设置</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="hardlink-tab" data-bs-toggle="tab" data-bs-target="#hardlink" type="button" role="tab" aria-controls="hardlink" aria-selected="false">硬链接设置</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tmdb-tab" data-bs-toggle="tab" data-bs-target="#tmdb" type="button" role="tab" aria-controls="tmdb" aria-selected="false">TMDB设置</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="ai-tab" data-bs-toggle="tab" data-bs-target="#ai" type="button" role="tab" aria-controls="ai" aria-selected="false">AI设置</button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <form method="post" action="/api/settings/update">
+                <div class="tab-content" id="settingsTabContent">
+                    <!-- 下载设置 -->
+                    <div class="tab-pane fade show active" id="download" role="tabpanel" aria-labelledby="download-tab">
+                        <div class="mb-3">
+                            <label for="qbittorrent_url" class="form-label">qBittorrent URL</label>
+                            <input type="text" class="form-control" id="qbittorrent_url" name="qbittorrent_url" value="{{ settings.download.qbittorrent_url }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="qbittorrent_port" class="form-label">qBittorrent 端口</label>
+                            <input type="number" class="form-control" id="qbittorrent_port" name="qbittorrent_port" value="{{ settings.download.qbittorrent_port }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="qbittorrent_username" class="form-label">qBittorrent 用户名</label>
+                            <input type="text" class="form-control" id="qbittorrent_username" name="qbittorrent_username" value="{{ settings.download.qbittorrent_username }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="qbittorrent_password" class="form-label">qBittorrent 密码</label>
+                            <input type="password" class="form-control" id="qbittorrent_password" name="qbittorrent_password" value="{{ settings.download.qbittorrent_password }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="download_dir" class="form-label">下载目录</label>
+                            <input type="text" class="form-control" id="download_dir" name="download_dir" value="{{ settings.download.download_dir }}">
+                            <div class="form-text">qBittorrent 存储下载文件的目录</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 硬链接设置 -->
+                    <div class="tab-pane fade" id="hardlink" role="tabpanel" aria-labelledby="hardlink-tab">
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="hardlink_enable" name="hardlink_enable" {% if settings.hardlink.enable %}checked{% endif %}>
+                            <label class="form-check-label" for="hardlink_enable">启用硬链接</label>
+                            <div class="form-text">启用后，会将文件硬链接到指定位置</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="hardlink_output_base" class="form-label">输出基础路径</label>
+                            <input type="text" class="form-control" id="hardlink_output_base" name="hardlink_output_base" value="{{ settings.hardlink.output_base }}">
+                            <div class="form-text">文件将按照 &lt;输出基础路径&gt;/&lt;来源名&gt;/&lt;季度&gt;/&lt;文件名&gt; 格式存放</div>
+                        </div>
+                    </div>
+                    
+                    <!-- TMDB设置 -->
+                    <div class="tab-pane fade" id="tmdb" role="tabpanel" aria-labelledby="tmdb-tab">
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="tmdb_enabled" name="tmdb_enabled" {% if settings.tmdb_api.enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="tmdb_enabled">启用 TMDB</label>
+                            <div class="form-text">启用后，将使用TMDB API获取影视信息</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tmdb_api_key" class="form-label">TMDB API Key</label>
+                            <input type="password" class="form-control" id="tmdb_api_key" name="tmdb_api_key" value="{{ settings.tmdb_api.api_key }}">
+                            <div class="form-text">从 <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB</a> 获取API密钥</div>
+                        </div>
+                    </div>
+                    
+                    <!-- AI设置 -->
+                    <div class="tab-pane fade" id="ai" role="tabpanel" aria-labelledby="ai-tab">
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="llm_enable" name="llm_enable" {% if settings.llm.enable %}checked{% endif %}>
+                            <label class="form-check-label" for="llm_enable">启用 AI</label>
+                            <div class="form-text">启用后，将使用 AI 进行文件分析和命名</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="llm_url" class="form-label">API URL</label>
+                            <input type="text" class="form-control" id="llm_url" name="llm_url" value="{{ settings.llm.url }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="llm_token" class="form-label">API 令牌</label>
+                            <input type="password" class="form-control" id="llm_token" name="llm_token" value="{{ settings.llm.token }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="llm_model_name" class="form-label">模型名称</label>
+                            <input type="text" class="form-control" id="llm_model_name" name="llm_model_name" value="{{ settings.llm.model_name }}">
+                            <div class="form-text">LLM模型名称，例如: gpt-3.5-turbo</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-end">
+                    <button type="submit" class="btn btn-primary">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+.sidebar {
+    min-height: 100vh;
+    background-color: #f8f9fa;
+    padding-top: 20px;
+}
+
+.sidebar-sticky {
+    position: sticky;
+    top: 0;
+    height: calc(100vh - 48px);
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.sidebar .nav-link {
+    font-weight: 500;
+    color: #333;
+}
+
+.sidebar .nav-link.active {
+    color: #007bff;
+}
+
+.main-content {
+    padding: 20px;
+}
+
+.badge-primary {
+    background-color: #007bff;
+}
+
+.badge-warning {
+    background-color: #ffc107;
+}
+
+.badge-success {
+    background-color: #28a745;
+}
+
+.badge-danger {
+    background-color: #dc3545;
+}

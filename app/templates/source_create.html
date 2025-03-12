@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}添加来源 - AIAutoBangumi{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">添加来源</h1>
+    
+    <div class="card">
+        <div class="card-body">
+            <form method="post" action="/api/source/create" id="sourceForm">
+                <div class="mb-3">
+                    <label for="type" class="form-label">来源类型</label>
+                    <select class="form-select" id="type" name="type" required>
+                        <option value="RSS">RSS</option>
+                        <option value="magnet">磁力链接</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="url" class="form-label">地址</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="url" name="url" required
+                               placeholder="RSS源URL或磁力链接">
+                        <button class="btn btn-outline-secondary" type="button" id="analyze-btn" 
+                                {% if not tmdb_api_enabled %}disabled{% endif %}>
+                            分析
+                            {% if not tmdb_api_enabled %}<i class="fas fa-info-circle" title="需启用TMDB API"></i>{% endif %}
+                        </button>
+                    </div>
+                    {% if not tmdb_api_enabled %}
+                    <small class="text-muted">TMDB API未启用，无法分析内容。请在系统设置中启用。</small>
+                    {% endif %}
+                </div>
+                
+                <!-- TMDB分析结果展示区域 -->
+                <div id="tmdb-results" class="mb-3" style="display:none;">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            TMDB搜索结果
+                        </div>
+                        <div class="card-body">
+                            <div id="loading-spinner" class="text-center">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">加载中...</span>
+                                </div>
+                                <p>正在分析内容，请稍候...</p>
+                            </div>
+                            <div id="tmdb-content" style="display:none;">
+                                <div class="mb-3">
+                                    <h5>检测到的标题:</h5>
+                                    <p id="detected-title" class="lead"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <h5>TMDB匹配结果:</h5>
+                                    <div id="tmdb-matches" class="list-group"></div>
+                                </div>
+                            </div>
+                            <div id="tmdb-error" class="alert alert-danger" style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 手动填写表单区域 -->
+                <div id="manual-input-section">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">来源名称</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="media_type" class="form-label">媒体类型</label>
+                        <select class="form-select" id="media_type" name="media_type" required>
+                            <option value="tv">电视剧</option>
+                            <option value="movie">电影</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3 tv-only">
+                        <label for="season" class="form-label">季度</label>
+                        <input type="number" class="form-control" id="season" name="season" min="1" value="1">
+                    </div>
+                </div>
+                
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="use_ai_episode" name="use_ai_episode" 
+                           {% if not ai_enabled %}disabled{% endif %}>
+                    <label class="form-check-label" for="use_ai_episode">
+                        使用 AI 提取剧集
+                        {% if not ai_enabled %}<small class="text-muted">(需在系统设置中启用AI)</small>{% endif %}
+                    </label>
+                </div>
+                
+                <div class="mb-3" id="episodeRegexField">
+                    <label for="episode_regex" class="form-label">剧集正则表达式</label>
+                    <input type="text" class="form-control" id="episode_regex" name="episode_regex" 
+                           placeholder="例如: E(\d+)">
+                    <div class="form-text">使用括号捕获剧集数字，如 E(\d+) 可以匹配 E01 中的 01</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="episode_offset" class="form-label">剧集偏移量</label>
+                    <input type="number" class="form-control" id="episode_offset" name="episode_offset" value="0">
+                    <div class="form-text">如果实际剧集需要+1或-1等调整，填写相应数字</div>
+                </div>
+                
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="enable_sr" name="enable_sr"
+                           {% if not sr_enabled %}disabled{% endif %}>
+                    <label class="form-check-label" for="enable_sr">
+                        启用超分辨率
+                        {% if not sr_enabled %}<small class="text-muted">(需在系统设置中启用超分辨率)</small>{% endif %}
+                    </label>
+                </div>
+                
+                <div class="mb-3" id="checkIntervalField">
+                    <label for="check_interval" class="form-label">检查间隔（秒）</label>
+                    <input type="number" class="form-control" id="check_interval" name="check_interval" value="3600">
+                </div>
+                
+                <div class="text-end">
+                    <a href="/api/source" class="btn btn-secondary me-2">取消</a>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+                
+                <!-- 隐藏的TMDB ID字段 -->
+                <input type="hidden" id="tmdb_id" name="tmdb_id" value="">
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const mediaTypeSelect = document.getElementById('media_type');
+        const seasonField = document.querySelector('.tv-only');
+        const useAiCheckbox = document.getElementById('use_ai_episode');
+        const episodeRegexField = document.getElementById('episodeRegexField');
+        const typeSelect = document.getElementById('type');
+        const checkIntervalField = document.getElementById('checkIntervalField');
+        const manualInputSection = document.getElementById('manual-input-section');
+        
+        // 初始化TMDB分析相关元素
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const urlInput = document.getElementById('url');
+        const tmdbResults = document.getElementById('tmdb-results');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const tmdbContent = document.getElementById('tmdb-content');
+        const tmdbError = document.getElementById('tmdb-error');
+        const detectedTitle = document.getElementById('detected-title');
+        const tmdbMatches = document.getElementById('tmdb-matches');
+        const titleInput = document.getElementById('title');
+        const tmdbIdInput = document.getElementById('tmdb_id');
+        
+        // TMDB分析按钮点击处理
+        if (analyzeBtn) {
+            analyzeBtn.addEventListener('click', async function() {
+                const url = urlInput.value.trim();
+                const type = typeSelect.value;
+                
+                if (!url) {
+                    alert('请先填写URL地址');
+                    return;
+                }
+                
+                // 显示加载中
+                tmdbResults.style.display = 'block';
+                loadingSpinner.style.display = 'block';
+                tmdbContent.style.display = 'none';
+                tmdbError.style.display = 'none';
+                
+                try {
+                    // 调用分析API
+                    const response = await fetch('/api/source/analyze', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            url: url,
+                            type: type.toLowerCase()
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.detail || '分析失败');
+                    }
+                    
+                    // 显示结果
+                    loadingSpinner.style.display = 'none';
+                    tmdbContent.style.display = 'block';
+                    
+                    // 显示检测到的标题
+                    if (data.title) {
+                        detectedTitle.textContent = data.title;
+                    } else {
+                        detectedTitle.textContent = '未检测到标题';
+                    }
+                    
+                    // 显示TMDB匹配结果
+                    tmdbMatches.innerHTML = '';
+                    
+                    if (data.tmdb_results && data.tmdb_results.length > 0) {
+                        // 初始隐藏手动输入区域
+                        manualInputSection.style.display = 'none';
+                        
+                        data.tmdb_results.forEach(item => {
+                            const button = document.createElement('button');
+                            button.type = 'button';
+                            button.className = 'list-group-item list-group-item-action';
+                            
+                            // 图片预览（如果有海报）
+                            let posterHtml = '';
+                            if (item.poster_path) {
+                                posterHtml = `<img src="https://image.tmdb.org/t/p/w92${item.poster_path}" 
+                                               class="float-start me-3" alt="${item.name || item.title}">`;
+                            }
+                            
+                            // 媒体类型和日期信息
+                            const mediaType = item.media_type || (item.first_air_date ? 'tv' : 'movie');
+                            const date = item.first_air_date || item.release_date || '';
+                            const year = date ? `(${date.split('-')[0]})` : '';
+                            
+                            // 季数信息（仅电视剧）
+                            let seasonInfo = '';
+                            if (mediaType === 'tv' && item.number_of_seasons) {
+                                seasonInfo = `<div>季数: ${item.number_of_seasons}</div>`;
+                            }
+                            
+                            // 构建内容
+                            button.innerHTML = `
+                                <div class="d-flex">
+                                    ${posterHtml}
+                                    <div>
+                                        <h5>${item.name || item.title} ${year}</h5>
+                                        <div>类型: ${mediaType === 'tv' ? '电视剧' : '电影'}</div>
+                                        ${seasonInfo}
+                                        <div>${item.overview ? item.overview.substring(0, 100) + '...' : '暂无简介'}</div>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            // 点击选中
+                            button.addEventListener('click', function() {
+                                // 移除其他项目的选中状态
+                                document.querySelectorAll('#tmdb-matches .list-group-item').forEach(el => {
+                                    el.classList.remove('active');
+                                });
+                                
+                                // 设置当前项目为选中状态
+                                button.classList.add('active');
+                                
+                                // 自动填充相关字段并隐藏手动输入区域
+                                titleInput.value = item.name || item.title;
+                                tmdbIdInput.value = item.id;
+                                
+                                const mediaType = item.media_type || (item.first_air_date ? 'tv' : 'movie');
+                                mediaTypeSelect.value = mediaType;
+                                
+                                if (mediaType === 'tv') {
+                                    seasonField.style.display = 'block';
+                                    
+                                    // 如果有多季，展开季度选择器
+                                    if (item.number_of_seasons > 0) {
+                                        const seasonInput = document.getElementById('season');
+                                        seasonInput.max = item.number_of_seasons;
+                                        
+                                        // 如果有正在播出的季，自动选择该季
+                                        if (item.seasons) {
+                                            const currentDate = new Date();
+                                            let latestSeason = null;
+                                            item.seasons.forEach(season => {
+                                                if (season.air_date) {
+                                                    const airDate = new Date(season.air_date);
+                                                    if (airDate <= currentDate) {
+                                                        latestSeason = season.season_number;
+                                                    }
+                                                }
+                                            });
+                                            
+                                            if (latestSeason) {
+                                                seasonInput.value = latestSeason;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    seasonField.style.display = 'none';
+                                }
+                                
+                                // 隐藏手动输入区域
+                                manualInputSection.style.display = 'none';
+                            });
+                            
+                            tmdbMatches.appendChild(button);
+                        });
+                    } else {
+                        tmdbMatches.innerHTML = '<div class="alert alert-warning">未找到匹配的TMDB结果</div>';
+                        // 显示手动输入区域
+                        manualInputSection.style.display = 'block';
+                    }
+                    
+                } catch (error) {
+                    // 显示错误信息
+                    loadingSpinner.style.display = 'none';
+                    tmdbError.style.display = 'block';
+                    tmdbError.textContent = `分析失败: ${error.message}`;
+                    // 显示手动输入区域
+                    manualInputSection.style.display = 'block';
+                }
+            });
+        }
+        
+        // 初始化显示/隐藏季度字段
+        updateSeasonField();
+        
+        // 初始化显示/隐藏正则表达式字段
+        updateRegexField();
+        
+        // 初始化显示/隐藏检查间隔字段
+        updateCheckIntervalField();
+        
+        // 监听媒体类型变化
+        mediaTypeSelect.addEventListener('change', updateSeasonField);
+        
+        // 监听AI提取选项变化
+        useAiCheckbox.addEventListener('change', updateRegexField);
+        
+        // 监听来源类型变化
+        typeSelect.addEventListener('change', updateCheckIntervalField);
+        
+        function updateSeasonField() {
+            if (mediaTypeSelect.value === 'tv') {
+                seasonField.style.display = 'block';
+            } else {
+                seasonField.style.display = 'none';
+            }
+        }
+        
+        function updateRegexField() {
+            if (useAiCheckbox.checked) {
+                episodeRegexField.style.display = 'none';
+            } else {
+                episodeRegexField.style.display = 'block';
+            }
+        }
+        
+        function updateCheckIntervalField() {
+            if (typeSelect.value === 'magnet') {
+                checkIntervalField.style.display = 'none';
+            } else {
+                checkIntervalField.style.display = 'block';
+            }
+        }
+    });
+</script>
+{% endblock %}

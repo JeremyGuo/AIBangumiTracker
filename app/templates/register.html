@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}注册 - AIAutoBangumi{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white text-center">
+                    <h3>用户注册</h3>
+                </div>
+                <div class="card-body">
+                    {% if error_message %}
+                    <div class="alert alert-danger">
+                        {{ error_message }}
+                    </div>
+                    {% endif %}
+                    
+                    <form method="post" action="/api/auth/register" id="registerForm">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">用户名</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">密码</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm-password" class="form-label">确认密码</label>
+                            <input type="password" class="form-control" id="confirm-password" required>
+                            <div class="invalid-feedback">
+                                两次密码输入不一致
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">注册</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-center">
+                    <p class="mb-0">已有账号？<a href="/api/auth/login">返回登录</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 客户端密码一致性验证
+    document.getElementById('registerForm').addEventListener('submit', function(e) {
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+        const confirmInput = document.getElementById('confirm-password');
+        
+        if (password !== confirmPassword) {
+            e.preventDefault();
+            confirmInput.classList.add('is-invalid');
+        } else {
+            confirmInput.classList.remove('is-invalid');
+        }
+    });
+    
+    // 输入时移除错误提示
+    document.getElementById('confirm-password').addEventListener('input', function() {
+        this.classList.remove('is-invalid');
+    });
+</script>
+{% endblock %}

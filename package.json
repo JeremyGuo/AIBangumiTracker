@@ -1,0 +1,17 @@
+{
+  "name": "aiautobangumi",
+  "version": "1.0.0",
+  "description": "自动视频下载分类系统",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "install-frontend": "cd frontend && npm install",
+    "build-frontend": "cd frontend && npm run build"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
