@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from app.core.config import settings
 from app.db.session import init_db, async_session
-from app.api.endpoints import auth, source, webhook, settings as settings_endpoint, torrents
+from app.api.endpoints import auth, source, settings as settings_endpoint, torrents
 from app.services.scheduler import scheduler
 from app.api.deps import get_current_user, get_token_from_request
 from app.models.database import User
@@ -47,7 +47,6 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # 注册路由
 app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
 app.include_router(source.router, prefix="/api/source", tags=["来源"])
-app.include_router(webhook.router, prefix="/api/webhook", tags=["Webhook"])
 app.include_router(settings_endpoint.router, prefix="/api/settings", tags=["设置"])
 app.include_router(torrents.router, prefix="/api/torrents", tags=["种子"])
 
