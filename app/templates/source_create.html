@@ -8,7 +8,7 @@
     
     <div class="card">
         <div class="card-body">
-            <form method="post" action="/api/source/create" id="sourceForm">
+            <form id="sourceForm">
                 <div class="mb-3">
                     <label for="type" class="form-label">来源类型</label>
                     <select class="form-select" id="type" name="type" required>
@@ -126,6 +126,14 @@
                 <!-- 隐藏的TMDB ID字段 -->
                 <input type="hidden" id="tmdb_id" name="tmdb_id" value="">
             </form>
+            
+            <!-- 添加提交状态提示 -->
+            <div id="submission-status" class="mt-3" style="display:none;">
+                <div class="spinner-border spinner-border-sm me-2" role="status" id="submission-spinner">
+                    <span class="visually-hidden">提交中...</span>
+                </div>
+                <span id="status-message"></span>
+            </div>
         </div>
     </div>
 </div>
@@ -153,6 +161,11 @@
         const tmdbMatches = document.getElementById('tmdb-matches');
         const titleInput = document.getElementById('title');
         const tmdbIdInput = document.getElementById('tmdb_id');
+        
+        // 获取提交状态相关元素
+        const submissionStatus = document.getElementById('submission-status');
+        const submissionSpinner = document.getElementById('submission-spinner');
+        const statusMessage = document.getElementById('status-message');
         
         // TMDB分析按钮点击处理
         if (analyzeBtn) {
@@ -313,6 +326,76 @@
                 }
             });
         }
+        
+        // 表单提交处理
+        const sourceForm = document.getElementById('sourceForm');
+        sourceForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            // 显示提交状态
+            submissionStatus.style.display = 'block';
+            submissionSpinner.style.display = 'inline-block';
+            statusMessage.textContent = '正在提交...';
+            
+            // 收集表单数据
+            const formData = {
+                url: document.getElementById('url').value.trim(),
+                type: document.getElementById('type').value,
+                title: document.getElementById('title').value.trim(),
+                media_type: document.getElementById('media_type').value,
+                episode_offset: parseInt(document.getElementById('episode_offset').value) || 0,
+                use_ai_episode: document.getElementById('use_ai_episode').checked,
+                enable_sr: document.getElementById('enable_sr').checked,
+                tmdb_id: document.getElementById('tmdb_id').value || ""
+            };
+            
+            // 只有电视剧才需要季度
+            if (formData.media_type === 'tv') {
+                formData.season = parseInt(document.getElementById('season').value) || 1;
+            }
+            
+            // 只有RSS才需要检查间隔
+            if (formData.type === 'RSS') {
+                formData.check_interval = parseInt(document.getElementById('check_interval').value) || 3600;
+            } else {
+                formData.check_interval = 0;
+            }
+            
+            // 如果不使用AI提取剧集，则需要正则表达式
+            if (!formData.use_ai_episode) {
+                formData.episode_regex = document.getElementById('episode_regex').value.trim();
+            }
+            
+            try {
+                const response = await fetch('/api/source/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '添加来源失败');
+                }
+                
+                const data = await response.json();
+                
+                // 提交成功，更新状态
+                submissionSpinner.style.display = 'none';
+                statusMessage.textContent = '添加成功，正在跳转...';
+                
+                // 跳转到来源列表页面
+                window.location.href = '/api/source';
+                
+            } catch (error) {
+                // 提交失败，显示错误
+                submissionSpinner.style.display = 'none';
+                statusMessage.textContent = `错误：${error.message}`;
+                statusMessage.style.color = 'red';
+            }
+        });
         
         // 初始化显示/隐藏季度字段
         updateSeasonField();

@@ -71,6 +71,7 @@ class SourceBase(BaseModel):
     use_ai_episode: bool = False
     enable_sr: Optional[bool] = False
     check_interval: int = 3600
+    tmdb_id: str = ""
 
 # Source创建过程中的响应模型
 class SourceCreationResponse(BaseModel):

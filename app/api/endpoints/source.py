@@ -23,65 +23,6 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger("api.source")
 
-@router.get("/{source_id}", response_class=HTMLResponse)
-async def get_source_detail(
-    request: Request,
-    source_id: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """获取来源详细信息和相关种子"""
-    # 验证用户登录
-    user, error = await get_current_user(request, db)
-    if error:
-        return RedirectResponse(url="/api/auth/login", status_code=status.HTTP_303_SEE_OTHER)
-    
-    # 查询来源信息
-    source_result = await db.execute(select(SourceModel).where(SourceModel.id == source_id))
-    source = source_result.scalar_one_or_none()
-    
-    if not source:
-        # 来源不存在，重定向到来源列表页面
-        return RedirectResponse(
-            url="/api/source?error=来源不存在", 
-            status_code=status.HTTP_303_SEE_OTHER
-        )
-    
-    # 查询该来源相关的所有种子，按创建时间降序排列
-    torrent_result = await db.execute(
-        select(Torrent)
-        .where(Torrent.source_id == source_id)
-        .order_by(Torrent.created_at.desc())
-    )
-    torrents = torrent_result.scalars().all()
-    
-    return templates.TemplateResponse(
-        "source_detail.html", 
-        {
-            "request": request,
-            "username": user.username,
-            "is_admin": user.is_admin,
-            "source": source,
-            "torrents": torrents
-        }
-    )
-
-@router.post("/analyze", response_model=AnalyzeSourceResponse)
-async def analyze_source(
-    request: AnalyzeSourceRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """分析来源URL，返回标题和TMDB匹配结果"""
-    result = await source_manager.analyze_url(
-        url=str(request.url),
-        source_type=request.type
-    )
-    if "error" in result:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result["error"]
-        )
-    return result
-
 @router.get("/", response_class=HTMLResponse)
 async def list_sources_page(
     request: Request,
@@ -139,6 +80,65 @@ async def create_source(
         return RedirectResponse(url="/api/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     logging.info(f"创建新的来源: {source_in}")
     return await source.create_with_user(db, user_id=user.id, obj_in=source_in.model_dump())
+
+@router.post("/analyze", response_model=AnalyzeSourceResponse)
+async def analyze_source(
+    request: AnalyzeSourceRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """分析来源URL，返回标题和TMDB匹配结果"""
+    result = await source_manager.analyze_url(
+        url=str(request.url),
+        source_type=request.type
+    )
+    if "error" in result:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["error"]
+        )
+    return result
+
+@router.get("/{source_id}", response_class=HTMLResponse)
+async def get_source_detail(
+    request: Request,
+    source_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取来源详细信息和相关种子"""
+    # 验证用户登录
+    user, error = await get_current_user(request, db)
+    if error:
+        return RedirectResponse(url="/api/auth/login", status_code=status.HTTP_303_SEE_OTHER)
+    
+    # 查询来源信息
+    source_result = await db.execute(select(SourceModel).where(SourceModel.id == source_id))
+    source = source_result.scalar_one_or_none()
+    
+    if not source:
+        # 来源不存在，重定向到来源列表页面
+        return RedirectResponse(
+            url="/api/source?error=来源不存在", 
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+    
+    # 查询该来源相关的所有种子，按创建时间降序排列
+    torrent_result = await db.execute(
+        select(Torrent)
+        .where(Torrent.source_id == source_id)
+        .order_by(Torrent.created_at.desc())
+    )
+    torrents = torrent_result.scalars().all()
+    
+    return templates.TemplateResponse(
+        "source_detail.html", 
+        {
+            "request": request,
+            "username": user.username,
+            "is_admin": user.is_admin,
+            "source": source,
+            "torrents": torrents
+        }
+    )
 
 @router.delete("/{source_id}")
 async def delete_source(
