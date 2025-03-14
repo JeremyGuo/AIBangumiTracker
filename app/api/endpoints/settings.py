@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.api.deps import get_current_user, get_current_admin_user
-from app.core.config import settings
+from app.core.config import settings, load_config
 from app.models.database import User
 from pathlib import Path
 import yaml
@@ -130,6 +130,9 @@ async def update_settings(
         # 保存配置
         with open(config_path, "w") as f:
             yaml.safe_dump(config, f)
+
+        # 重新载入settings
+        settings = load_config()
         
         # 重定向回设置页面，带有成功消息
         return templates.TemplateResponse(

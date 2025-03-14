@@ -48,6 +48,10 @@
                                         data-torrent-id="{{ torrent.id }}">
                                         刷新文件列表
                                     </button>
+                                    <button type="button" class="btn btn-success expand-files-btn"
+                                        data-torrent-id="{{ torrent.id }}">
+                                        展开文件
+                                    </button>
                                     {% endif %}
                                     <button type="button" class="btn btn-danger delete-btn" 
                                         data-bs-toggle="modal" 
@@ -55,6 +59,17 @@
                                         data-torrent-id="{{ torrent.id }}">
                                         删除
                                     </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr class="file-list-container" id="files-{{ torrent.id }}" style="display: none;">
+                            <td colspan="5" class="p-0">
+                                <div class="file-list-content p-3 bg-light">
+                                    <h5>文件列表</h5>
+                                    <div class="spinner-border spinner-border-sm text-primary" role="status" id="files-loading-{{ torrent.id }}">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <div class="files-data" id="files-data-{{ torrent.id }}"></div>
                                 </div>
                             </td>
                         </tr>
@@ -122,6 +137,30 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" id="confirmRefreshBtn" class="btn btn-primary" data-loading-text="刷新中...">刷新</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 硬链接创建对话框 -->
+<div class="modal fade" id="hardlinkModal" tabindex="-1" aria-labelledby="hardlinkModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="hardlinkModalLabel">创建硬链接</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>为以下文件创建硬链接:</p>
+                <p id="filePathToHardlink" class="text-muted small"></p>
+                <p class="alert alert-info">
+                    目标路径将根据文件信息自动生成
+                </p>
+                <input type="hidden" id="fileIdToHardlink" value="">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" id="confirmHardlinkBtn" class="btn btn-primary" data-loading-text="创建中...">创建</button>
             </div>
         </div>
     </div>
@@ -320,6 +359,187 @@
                     confirmRefreshBtn.disabled = false;
                 });
             });
+        }
+
+        // 展开文件列表功能
+        document.querySelectorAll('.expand-files-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const torrentId = this.getAttribute('data-torrent-id');
+                const fileContainer = document.getElementById(`files-${torrentId}`);
+                const fileData = document.getElementById(`files-data-${torrentId}`);
+                const loadingSpinner = document.getElementById(`files-loading-${torrentId}`);
+                
+                // 切换显示状态
+                if (fileContainer.style.display === 'none') {
+                    fileContainer.style.display = 'table-row';
+                    
+                    // 如果没有加载过数据，则加载
+                    if (fileData.innerHTML === '') {
+                        loadingSpinner.style.display = 'inline-block';
+                        
+                        // 获取文件列表
+                        fetch(`/api/torrents/${torrentId}/files`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('获取文件列表失败');
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            loadingSpinner.style.display = 'none';
+                            
+                            // 检查是否有文件
+                            if (data.files && data.files.length > 0) {
+                                // 创建文件表格
+                                let tableHtml = `
+                                    <table class="table table-sm table-bordered mt-2">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>文件名</th>
+                                                <th>大小</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                `;
+                                
+                                // 添加每个文件
+                                data.files.forEach(file => {
+                                    const fileName = file.path.split('/').pop();
+                                    const fileSize = formatFileSize(file.size);
+                                    tableHtml += `
+                                        <tr>
+                                            <td>${file.id}</td>
+                                            <td title="${file.path}">${fileName}</td>
+                                            <td>${fileSize}</td>
+                                            <td>
+                                                ${file.is_valid_episode ? 
+                                                    `<span class="badge bg-success me-2">EP ${file.extracted_episode} → ${file.final_episode}</span>` : 
+                                                    '<span class="badge bg-warning me-2">无剧集信息</span>'
+                                                }
+                                                <button type="button" class="btn btn-sm btn-primary hardlink-btn"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#hardlinkModal"
+                                                    data-file-id="${file.id}"
+                                                    data-file-path="${file.path}"
+                                                    data-episode="${file.final_episode}">
+                                                    创建硬链接
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                });
+                                
+                                tableHtml += `</tbody></table>`;
+                                fileData.innerHTML = tableHtml;
+                                
+                                // 为新添加的硬链接按钮添加事件
+                                fileData.querySelectorAll('.hardlink-btn').forEach(btn => {
+                                    btn.addEventListener('click', function() {
+                                        const fileId = this.getAttribute('data-file-id');
+                                        const filePath = this.getAttribute('data-file-path');
+                                        const episode = this.getAttribute('data-episode');
+                                        
+                                        document.getElementById('fileIdToHardlink').value = fileId;
+                                        document.getElementById('filePathToHardlink').textContent = filePath;
+                                    });
+                                });
+                                
+                            } else {
+                                fileData.innerHTML = '<div class="alert alert-info">没有文件</div>';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            loadingSpinner.style.display = 'none';
+                            fileData.innerHTML = `<div class="alert alert-danger">加载失败: ${error.message}</div>`;
+                        });
+                    }
+                } else {
+                    fileContainer.style.display = 'none';
+                }
+            });
+        });
+
+        // 硬链接创建处理
+        const hardlinkModal = document.getElementById('hardlinkModal');
+        let currentFileId = null;
+
+        if (hardlinkModal) {
+            hardlinkModal.addEventListener('show.bs.modal', function(event) {
+                const button = event.relatedTarget;
+                currentFileId = button.getAttribute('data-file-id');
+            });
+        }
+
+        // AJAX硬链接创建处理
+        const confirmHardlinkBtn = document.getElementById('confirmHardlinkBtn');
+        if (confirmHardlinkBtn) {
+            confirmHardlinkBtn.addEventListener('click', function() {
+                const fileId = document.getElementById('fileIdToHardlink').value;
+                
+                if (!fileId) {
+                    showNotification('文件ID无效', 'warning');
+                    return;
+                }
+
+                // 显示加载状态
+                const originalText = confirmHardlinkBtn.textContent;
+                confirmHardlinkBtn.textContent = confirmHardlinkBtn.getAttribute('data-loading-text');
+                confirmHardlinkBtn.disabled = true;
+
+                // 发送AJAX请求
+                fetch(`/api/torrents/files/${fileId}/hardlink`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({}) // 发送空对象，不再需要destination_path
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('创建硬链接失败');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // 关闭模态框
+                    const bsModal = bootstrap.Modal.getInstance(hardlinkModal);
+                    bsModal.hide();
+
+                    // 显示成功通知
+                    showNotification(`硬链接创建成功: ${data.destination_path}`, 'success');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // 显示错误通知
+                    showNotification('创建硬链接失败: ' + error.message, 'danger');
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    confirmHardlinkBtn.textContent = originalText;
+                    confirmHardlinkBtn.disabled = false;
+                });
+            });
+        }
+
+        // 文件大小格式化函数
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
         // 通知函数
