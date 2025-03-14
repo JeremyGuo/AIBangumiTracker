@@ -41,6 +41,14 @@
                                         重试
                                     </button>
                                     {% endif %}
+                                    {% if torrent.status == 'downloaded' %}
+                                    <button type="button" class="btn btn-primary refresh-btn" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#refreshModal" 
+                                        data-torrent-id="{{ torrent.id }}">
+                                        刷新文件列表
+                                    </button>
+                                    {% endif %}
                                     <button type="button" class="btn btn-danger delete-btn" 
                                         data-bs-toggle="modal" 
                                         data-bs-target="#deleteModal" 
@@ -95,6 +103,25 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" id="confirmRetryBtn" class="btn btn-warning" data-loading-text="重试中...">重试</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 刷新确认对话框 -->
+<div class="modal fade" id="refreshModal" tabindex="-1" aria-labelledby="refreshModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="refreshModalLabel">确认刷新</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                确定要刷新种子 <span id="torrentIdToRefresh"></span> 的文件列表吗？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" id="confirmRefreshBtn" class="btn btn-primary" data-loading-text="刷新中...">刷新</button>
             </div>
         </div>
     </div>
@@ -228,6 +255,69 @@
                     // 恢复按钮状态
                     confirmRetryBtn.textContent = originalText;
                     confirmRetryBtn.disabled = false;
+                });
+            });
+        }
+
+        // 刷新模态框处理
+        const refreshModal = document.getElementById('refreshModal');
+        let currentRefreshTorrentId = null;
+
+        if (refreshModal) {
+            refreshModal.addEventListener('show.bs.modal', function(event) {
+                const button = event.relatedTarget;
+                currentRefreshTorrentId = button.getAttribute('data-torrent-id');
+                document.getElementById('torrentIdToRefresh').textContent = currentRefreshTorrentId;
+            });
+        }
+
+        // AJAX刷新处理
+        const confirmRefreshBtn = document.getElementById('confirmRefreshBtn');
+        if (confirmRefreshBtn) {
+            confirmRefreshBtn.addEventListener('click', function() {
+                if (!currentRefreshTorrentId) return;
+
+                // 显示加载状态
+                const originalText = confirmRefreshBtn.textContent;
+                confirmRefreshBtn.textContent = confirmRefreshBtn.getAttribute('data-loading-text');
+                confirmRefreshBtn.disabled = true;
+
+                // 发送AJAX请求
+                fetch(`/api/torrents/${currentRefreshTorrentId}/refresh`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('刷新请求失败');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // 关闭模态框
+                    const bsModal = bootstrap.Modal.getInstance(refreshModal);
+                    bsModal.hide();
+
+                    // 显示成功通知
+                    showNotification('刷新成功', 'success');
+                    
+                    // 刷新页面以获取最新状态
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000); // 延迟1秒刷新，让用户先看到成功通知
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // 显示错误通知
+                    showNotification('刷新失败: ' + error.message, 'danger');
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    confirmRefreshBtn.textContent = originalText;
+                    confirmRefreshBtn.disabled = false;
                 });
             });
         }

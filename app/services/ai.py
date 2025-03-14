@@ -155,12 +155,15 @@ class AIClient:
 
     async def extract_episode(self, title: str) -> Optional[int]:
         """从标题中提取集数信息"""
-        prompt = f"""请从这个标题中提取动漫的集数（如果有）。
-只返回一个数字，例如：13
+        prompt = f"""
+<title>{title}</title>
+
+请从标题中提取动漫的集数（如果有）。
+将返回的集数填写在<episode>标签中。例如<episode>12</episode>。
 如果找不到集数信息，返回null。
 如果遇到类似OVA或特别篇，返回null。
-
-标题: {title}"""
+标题放在<title>标签中，请在<title>标签中找到集数信息。
+"""
 
         for _ in range(2):  # 最多尝试两次
             response = await self._make_request(prompt)
@@ -168,6 +171,11 @@ class AIClient:
                 continue
                 
             try:
+                import re
+                match = re.search(r"<episode>(.*?)</episode>", response, re.DOTALL)
+                if not match:
+                    continue
+                response = match.group(1)
                 if response.strip().lower() == "null":
                     continue
                 episode = int(response.strip())
@@ -248,6 +256,43 @@ class AIClient:
                 "season": None,
                 "episode": None
             }
+
+    async def is_main_content(self, file_path: str) -> bool:
+        """
+        判断文件是否为需要保留的正片或字幕文件
+        
+        Args:
+            file_path: 文件的完整路径
+            
+        Returns:
+            True如果是正片或正片字幕文件，否则False
+        """
+        prompt = f"""请分析这个文件路径，判断它是否是动漫的正片视频或者正片的字幕文件。
+        
+<path>{file_path}</path>
+
+请回答"yes"或者"no"：
+- "yes": 这个文件是主要内容（正片视频或字幕）
+- "no": 这个文件是预告片、采访、花絮、样本、截图等非必要内容
+
+<path>标签为要判断的文件名（包含目录），将判断的结果放到<result>标签中返回。
+
+判断标准：
+1. 如果文件扩展名是.mkv, .mp4, .avi, .ts等视频格式，并且文件名不包含"sample", "trailer", "preview"等词，那么很可能是正片
+2. 如果文件扩展名是.ass, .srt, .ssa等字幕格式，并且文件名与正片视频相似，那么很可能是正片字幕
+3. 扩展名为.nfo, .txt, .jpg, .png等非视频非字幕文件通常不是正片内容
+4. 如果路径中包含"Samples", "Trailers", "Extras", "SP", 等文件夹，可能不是正片内容
+5. 特典番外不算正片
+
+请只回答"yes"或"no"。"""
+        response = await self._make_request(prompt)
+        import re
+        match = re.search(r"<result>(.*?)</result>", response, re.DOTALL)
+        if not match:
+            return False
+        if match.group(1).strip() == "yes":
+            return True
+        return False
 
 # 创建全局AI客户端实例
 ai_client = AIClient()

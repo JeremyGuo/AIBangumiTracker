@@ -156,3 +156,48 @@ async def retry_torrent_download(
             "started_at": updated_torrent.started_at
         }
     }
+
+@router.post("/{torrent_id}/refresh")
+async def refresh_torrent_files(
+    torrent_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """刷新种子的文件列表"""
+    user, error = await get_current_user(request, db)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="需要身份验证"
+        )
+    
+    # 检查种子是否存在
+    result = await db.execute(select(Torrent).where(Torrent.id == torrent_id))
+    torrent = result.scalar_one_or_none()
+    
+    if not torrent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="种子不存在"
+        )
+    
+    # 刷新文件列表
+    updated_torrent = await download_manager.refresh_torrent_files(db, torrent_id)
+    
+    if not updated_torrent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="刷新文件列表失败"
+        )
+    
+    logger.info(f"已刷新种子 ID:{torrent_id} 的文件列表")
+    return {
+        "status": "success", 
+        "message": "已刷新文件列表",
+        "torrent": {
+            "id": updated_torrent.id,
+            "status": updated_torrent.status,
+            "download_progress": updated_torrent.download_progress,
+            "started_at": updated_torrent.started_at
+        }
+    }
