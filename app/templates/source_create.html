@@ -93,9 +93,17 @@
                 
                 <div class="mb-3" id="episodeRegexField">
                     <label for="episode_regex" class="form-label">剧集正则表达式</label>
-                    <input type="text" class="form-control" id="episode_regex" name="episode_regex" 
-                           placeholder="例如: E(\d+)">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="episode_regex" name="episode_regex" 
+                               placeholder="例如: E(\d+)">
+                        <button class="btn btn-outline-secondary" type="button" id="generate-regex-btn"
+                                {% if not ai_enabled %}disabled{% endif %}>
+                            生成正则
+                            {% if not ai_enabled %}<i class="fas fa-info-circle" title="需启用AI"></i>{% endif %}
+                        </button>
+                    </div>
                     <div class="form-text">使用括号捕获剧集数字，如 E(\d+) 可以匹配 E01 中的 01</div>
+                    <div id="regex-status" style="display:none;"></div>
                 </div>
                 
                 <div class="mb-3">
@@ -148,7 +156,9 @@
         const episodeRegexField = document.getElementById('episodeRegexField');
         const typeSelect = document.getElementById('type');
         const checkIntervalField = document.getElementById('checkIntervalField');
-        const manualInputSection = document.getElementById('manual-input-section');
+        const generateRegexBtn = document.getElementById('generate-regex-btn');
+        const regexInput = document.getElementById('episode_regex');
+        const regexStatus = document.getElementById('regex-status');
         
         // 初始化TMDB分析相关元素
         const analyzeBtn = document.getElementById('analyze-btn');
@@ -218,9 +228,6 @@
                     tmdbMatches.innerHTML = '';
                     
                     if (data.tmdb_results && data.tmdb_results.length > 0) {
-                        // 初始隐藏手动输入区域
-                        manualInputSection.style.display = 'none';
-                        
                         data.tmdb_results.forEach(item => {
                             const button = document.createElement('button');
                             button.type = 'button';
@@ -303,17 +310,12 @@
                                 } else {
                                     seasonField.style.display = 'none';
                                 }
-                                
-                                // 隐藏手动输入区域
-                                manualInputSection.style.display = 'none';
                             });
                             
                             tmdbMatches.appendChild(button);
                         });
                     } else {
                         tmdbMatches.innerHTML = '<div class="alert alert-warning">未找到匹配的TMDB结果</div>';
-                        // 显示手动输入区域
-                        manualInputSection.style.display = 'block';
                     }
                     
                 } catch (error) {
@@ -321,8 +323,6 @@
                     loadingSpinner.style.display = 'none';
                     tmdbError.style.display = 'block';
                     tmdbError.textContent = `分析失败: ${error.message}`;
-                    // 显示手动输入区域
-                    manualInputSection.style.display = 'block';
                 }
             });
         }
@@ -346,7 +346,9 @@
                 episode_offset: parseInt(document.getElementById('episode_offset').value) || 0,
                 use_ai_episode: document.getElementById('use_ai_episode').checked,
                 enable_sr: document.getElementById('enable_sr').checked,
-                tmdb_id: document.getElementById('tmdb_id').value || ""
+                tmdb_id: document.getElementById('tmdb_id').value || "",
+                // Always include episode_regex regardless of use_ai_episode setting
+                episode_regex: document.getElementById('episode_regex').value.trim()
             };
             
             // 只有电视剧才需要季度
@@ -359,11 +361,6 @@
                 formData.check_interval = parseInt(document.getElementById('check_interval').value) || 3600;
             } else {
                 formData.check_interval = 0;
-            }
-            
-            // 如果不使用AI提取剧集，则需要正则表达式
-            if (!formData.use_ai_episode) {
-                formData.episode_regex = document.getElementById('episode_regex').value.trim();
             }
             
             try {
@@ -397,6 +394,116 @@
             }
         });
         
+        // 添加生成正则按钮点击事件
+        if (generateRegexBtn) {
+            generateRegexBtn.addEventListener('click', async function() {
+                const url = urlInput.value.trim();
+                
+                if (!url) {
+                    alert('请先填写RSS源URL');
+                    return;
+                }
+                
+                if (typeSelect.value !== 'RSS') {
+                    alert('仅支持RSS源生成正则表达式');
+                    return;
+                }
+                
+                // 显示加载状态
+                generateRegexBtn.disabled = true;
+                generateRegexBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 生成中...';
+                regexStatus.style.display = 'none';
+                
+                try {
+                    // 调用生成正则表达式的API
+                    const formData = new FormData();
+                    formData.append('url', url);
+                    
+                    const response = await fetch('/api/source/generate-regex', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.message || '生成正则表达式失败');
+                    }
+                    
+                    // 更新正则表达式输入框
+                    regexInput.value = data.regex;
+                    
+                    // 测试正则表达式
+                    let testResult = '';
+                    try {
+                        const regex = new RegExp(data.regex);
+                        const match = data.sample_title.match(regex);
+                        
+                        if (match && match.length > 1) {
+                            const extractedEpisode = match[1]; // 第一个捕获组
+                            testResult = `<div class="mt-2"><strong>测试结果:</strong> 从样本中提取到集数 <span class="badge bg-success">${extractedEpisode}</span></div>`;
+                        } else {
+                            testResult = `<div class="mt-2"><strong>测试结果:</strong> <span class="text-warning">未能从样本中提取到集数</span></div>`;
+                        }
+                    } catch (regexError) {
+                        testResult = `<div class="mt-2"><strong>测试结果:</strong> <span class="text-danger">正则表达式测试失败: ${regexError.message}</span></div>`;
+                    }
+                    
+                    // 显示成功信息和测试结果
+                    regexStatus.style.display = 'block';
+                    regexStatus.className = 'mt-2 alert alert-success';
+                    regexStatus.innerHTML = `
+                        <i class="fas fa-check-circle"></i> 已根据样本 "${data.sample_title}" 生成正则表达式
+                        ${testResult}
+                        <div class="mt-2">
+                            <small class="text-muted">提示: 如果测试结果不符合预期，您可以手动修改正则表达式</small>
+                        </div>
+                    `;
+                    
+                } catch (error) {
+                    // 显示错误信息
+                    regexStatus.style.display = 'block';
+                    regexStatus.className = 'mt-2 alert alert-danger';
+                    regexStatus.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${error.message}`;
+                    
+                } finally {
+                    // 恢复按钮状态
+                    generateRegexBtn.disabled = false;
+                    generateRegexBtn.innerHTML = '生成正则';
+                }
+            });
+        }
+        
+        // 添加正则表达式实时测试功能
+        const sampleTitle = {value: ''};
+        
+        regexInput.addEventListener('input', function() {
+            if (!sampleTitle.value) return;
+            
+            testRegex(regexInput.value, sampleTitle.value);
+        });
+        
+        function testRegex(regex, title) {
+            if (!regexStatus.style.display || regexStatus.style.display === 'none') return;
+            
+            const testResultDiv = regexStatus.querySelector('div[data-test-result]');
+            if (!testResultDiv) return;
+            
+            try {
+                const regexObj = new RegExp(regex);
+                const match = title.match(regexObj);
+                
+                if (match && match.length > 1) {
+                    const extractedEpisode = match[1]; // 第一个捕获组
+                    testResultDiv.innerHTML = `<strong>测试结果:</strong> 从样本中提取到集数 <span class="badge bg-success">${extractedEpisode}</span>`;
+                } else {
+                    testResultDiv.innerHTML = `<strong>测试结果:</strong> <span class="text-warning">未能从样本中提取到集数</span>`;
+                }
+            } catch (regexError) {
+                testResultDiv.innerHTML = `<strong>测试结果:</strong> <span class="text-danger">正则表达式测试失败</span>`;
+            }
+        }
+        
         // 初始化显示/隐藏季度字段
         updateSeasonField();
         
@@ -413,7 +520,18 @@
         useAiCheckbox.addEventListener('change', updateRegexField);
         
         // 监听来源类型变化
-        typeSelect.addEventListener('change', updateCheckIntervalField);
+        typeSelect.addEventListener('change', function() {
+            if (generateRegexBtn && !useAiCheckbox.checked) {
+                generateRegexBtn.disabled = (typeSelect.value !== 'RSS' || !urlInput.value.trim());
+            }
+            updateCheckIntervalField();
+        });
+        
+        urlInput.addEventListener('input', function() {
+            if (generateRegexBtn && !useAiCheckbox.checked && typeSelect.value === 'RSS') {
+                generateRegexBtn.disabled = !urlInput.value.trim();
+            }
+        });
         
         function updateSeasonField() {
             if (mediaTypeSelect.value === 'tv') {
@@ -428,6 +546,10 @@
                 episodeRegexField.style.display = 'none';
             } else {
                 episodeRegexField.style.display = 'block';
+                // 根据当前来源类型更新"生成正则"按钮状态
+                if (generateRegexBtn) {
+                    generateRegexBtn.disabled = (typeSelect.value !== 'RSS' || !urlInput.value.trim());
+                }
             }
         }
         

@@ -1,6 +1,6 @@
 from typing import List, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -141,6 +141,7 @@ async def get_source_detail(
     )
 
 @router.delete("/{source_id}")
+@router.post("/{source_id}/delete")  # Add POST method endpoint to match frontend
 async def delete_source(
     source_id: int,
     current_user: User = Depends(get_current_admin_user),
@@ -186,3 +187,55 @@ async def reset_source_check_time(
     
     logger.info(f"已重置来源 ID:{source_id} 的检查时间")
     return {"status": "success", "message": "已重置来源的检查时间"}
+
+@router.post("/generate-regex", response_model=dict)
+async def generate_episode_regex(
+    request: Request,
+    url: str = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """从RSS源的第一个条目生成集数正则表达式"""
+    user, error = await get_current_user(request, db)
+    if error:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"status": "error", "message": "未登录或会话已过期"}
+        )
+    
+    try:
+        # 获取RSS源的第一个条目标题
+        from app.services.rss_parser import rss_parser
+        item = await rss_parser.parse_feed_first_item(url)
+        
+        if not item:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"status": "error", "message": "无法获取RSS源数据"}
+            )
+        
+        # 使用第一个条目的标题生成正则表达式
+        from app.services.ai import ai_client
+        first_item_title = item["title"]
+        
+        if not first_item_title:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"status": "error", "message": "无法获取条目标题"}
+            )
+        
+        regex_pattern = await ai_client.generate_episode_regex(first_item_title)
+        
+        if not regex_pattern:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"status": "error", "message": "无法生成正则表达式"}
+            )
+        
+        return {"status": "success", "regex": regex_pattern, "sample_title": first_item_title}
+        
+    except Exception as e:
+        logger.error(f"生成正则表达式失败: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"status": "error", "message": f"生成失败: {str(e)}"}
+        )

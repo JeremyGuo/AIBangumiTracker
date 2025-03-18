@@ -71,6 +71,9 @@ class DownloadManager:
         if not torrent_info:
             torrent.status = "failed"
             torrent.error_message = "无法获取种子信息"
+            db.add(torrent)
+            await db.commit()
+            return
         # 更新状态
         torrent.download_progress = torrent_info["progress"] * 100
         if torrent_info["state"] in ["uploading", "stalledUP", "forcedUP", "queuedUP", "pausedUP"]:
@@ -194,23 +197,35 @@ class DownloadManager:
             full_path = os.path.join(download_dir, file_path)
             logging.info(f"处理文件: {full_path}")
             
-            # 使用AI判断这个文件是否为需要保留的正片文件
-            is_main_content = await ai_client.is_main_content(file_path)
-            logging.info(f"文件 {file_path} 是否为主要内容: {is_main_content}")
-
-            if not is_main_content:
-                logging.info(f"文件 {file_path} 不是主要内容，跳过")
-                continue
-
-            # 使用AI提取剧集信息
             if source.use_ai_episode:
+                # 使用AI提取剧集信息
+                
+                # 使用AI判断这个文件是否为需要保留的正片文件
+                is_main_content = await ai_client.is_main_content(file_path)
+                logging.info(f"文件 {file_path} 是否为主要内容: {is_main_content}")
+
+                if not is_main_content:
+                    logging.info(f"文件 {file_path} 不是主要内容，跳过")
+                    continue
+
                 episode_value = await ai_client.extract_episode(file_path)
+                if not episode_value:
+                    logging.warning(f"文件 {file_path} 未提取到剧集信息")
+                    continue
             else:
-                logging.warning(f"Source {source.id} 未启用AI提取剧集信息")
-                continue
-            if not episode_value:
-                logging.warning(f"文件 {file_path} 未提取到剧集信息")
-                continue
+                # 使用正则表达式提取
+                regex = source.episode_regex
+                episode_value = None
+
+                import re
+                match = re.search(regex, file_path)
+                if match:
+                    episode_value = int(match.group(1))
+
+                if not episode_value:
+                    logging.warning(f"文件 {file_path} 未提取到剧集信息")
+                    continue
+            
             logging.info(f"文件 {file_path} 提取的剧集信息: {episode_value}")
             
             # 创建文件记录

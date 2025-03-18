@@ -284,7 +284,7 @@ class AIClient:
 4. 如果路径中包含"Samples", "Trailers", "Extras", "SP", 等文件夹，可能不是正片内容
 5. 特典番外不算正片
 
-请只回答"yes"或"no"。"""
+请只回答"yes"或"no"，将判断的结果放到<result>标签中返回：<result>yes</result> 或 <result>no</result>"""
         response = await self._make_request(prompt)
         import re
         match = re.search(r"<result>(.*?)</result>", response, re.DOTALL)
@@ -293,6 +293,45 @@ class AIClient:
         if match.group(1).strip() == "yes":
             return True
         return False
+
+    async def generate_episode_regex(self, title: str) -> Optional[str]:
+        """从标题中提取可用于识别集数的正则表达式模式"""
+        prompt = f"""分析下面这个动漫标题，为其生成一个用于提取集数的正则表达式。
+
+<title>{title}</title>
+
+请提供一个正则表达式，用于从类似格式的标题中提取剧集号码。
+正则表达式应该:
+1. 使用括号 () 来捕获集数
+2. 正确匹配标题中表示集数的部分（如E01, 第01集, EP.01等）
+3. 只捕获数字部分
+4. 尽可能精确，避免误匹配
+
+请在<regex>标签中返回正则表达式。
+例如: <regex>E(\d+)</regex> 或 <regex>第(\d+)集</regex>
+
+如果无法确定，返回 <regex>null</regex>。"""
+
+        response = await self._make_request(prompt)
+        if not response:
+            return None
+
+        # 提取正则表达式
+        import re
+        match = re.search(r"<regex>(.*?)</regex>", response, re.DOTALL)
+        if not match:
+            return None
+        
+        regex = match.group(1).strip()
+        if regex.lower() == "null":
+            return None
+        
+        # 简单验证正则表达式的有效性
+        try:
+            re.compile(regex)
+            return regex
+        except re.error:
+            return None
 
 # 创建全局AI客户端实例
 ai_client = AIClient()

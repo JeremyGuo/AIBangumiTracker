@@ -114,6 +114,32 @@ class RSSParser:
             return parsedate_to_datetime(date_str)
         except Exception:
             return None
+    
+    async def parse_feed_first_item(self, url: str) -> Optional[Dict]:
+        content = await self._fetch_content(url)
+        if not content:
+            return None
+        
+        try:
+            root = ET.fromstring(content)
+            items = root.findall(".//item")
+            if not items or len(items) == 0:
+                return None
+            
+            # 提取第一个条目
+            item = items[0]
+            result = {
+                "title": None
+            }
+
+            # 提取标题
+            title_elem = item.find("title")
+            if title_elem is not None and title_elem.text:
+                result["title"] = title_elem.text.strip()
+
+            return result
+        except Exception:
+            return None
 
     async def parse_feed(self, url: str) -> Tuple[Optional[str], List[Dict]]:
         """解析RSS源，返回(RSS标题, 条目列表)"""

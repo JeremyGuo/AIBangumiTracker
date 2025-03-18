@@ -68,6 +68,7 @@ class SourceBase(BaseModel):
     media_type: str
     season: Optional[int] = None
     episode_offset: int = 0
+    episode_regex: Optional[str] = None
     use_ai_episode: bool = False
     enable_sr: Optional[bool] = False
     check_interval: int = 3600
